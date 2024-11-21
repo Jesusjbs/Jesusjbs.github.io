@@ -1,23 +1,145 @@
-<html>
-<style>
-	.class1 { shape-outside: url(data:image/gif;base64,R0lGODlhEAAQAMQAAORHHOVSKudfOulrSOp3WOyDZu6QdvCchPGolfO0o/XBs/fNwfjZ0frl3/zy7////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAkAABAALAAAAAAQABAAAAVVICSOZGlCQAosJ6mu7fiyZeKqNKToQGDsM8hBADgUXoGAiqhSvp5QAnQKGIgUhwFUYLCVDFCrKUE1lBavAViFIDlTImbKC5Gm2hB0SlBCBMQiB0UjIQA7); }
-	msub::first-line { background-image: cross-fade(url(abc), url(data:image/gif;base64,R0lGODlhEAAQAMQAAORHHOVSKudfOulrSOp3WOyDZu6QdvCchPGolfO0o/XBs/fNwfjZ0frl3/zy7////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAkAABAALAAAAAAQABAAAAVVICSOZGlCQAosJ6mu7fiyZeKqNKToQGDsM8hBADgUXoGAiqhSvp5QAnQKGIgUhwFUYLCVDFCrKUE1lBavAViFIDlTImbKC5Gm2hB0SlBCBMQiB0UjIQA7), 50%);  }
-</style>
-<script>
-	function trigger() {
-		document.getElementsByTagName("style")[0].appendChild(document.createElement("a")); 
-		setTimeout( () => {
-			msubEle.prepend("1");
-			mathEle.focus() // This can be a few different calls. setSelectionRange also worked
-			mathEle.remove();
-		}, 0);
-	}
-</script>
-<body onload=trigger()>
-	<math id="mathEle" class="class1">
-		<msub id="msubEle">
-			<mi></mi>
-		</msub>
-	</math>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webcam Stream Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 20px;
+    }
+    video, canvas {
+      border: 1px solid #ccc;
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <h1>Webcam Stream Viewer</h1>
+  <label for="videoSelect">Choose a camera:</label>
+  <select id="videoSelect"></select>
+  <button id="flipCamera">Flip Camera</button>
+  <video id="video" autoplay></video>
+  <canvas id="canvas"></canvas>
+
+  <script>
+    class Webcam {
+      constructor(webcamElement, facingMode = 'user', canvasElement = null, snapSoundElement = null) {
+        this._webcamElement = webcamElement;
+        this._webcamElement.width = this._webcamElement.width || 640;
+        this._webcamElement.height = this._webcamElement.height || 360;
+        this._facingMode = facingMode;
+        this._webcamList = [];
+        this._streamList = [];
+        this._selectedDeviceId = '';
+        this._canvasElement = canvasElement;
+        this._snapSoundElement = snapSoundElement;
+      }
+
+      getVideoInputs(mediaDevices) {
+        this._webcamList = [];
+        mediaDevices.forEach(mediaDevice => {
+          if (mediaDevice.kind === 'videoinput') {
+            this._webcamList.push(mediaDevice);
+          }
+        });
+        return this._webcamList;
+      }
+
+      getMediaConstraints() {
+        var videoConstraints = {};
+        if (this._selectedDeviceId == '') {
+          videoConstraints.facingMode = this._facingMode;
+        } else {
+          videoConstraints.deviceId = { exact: this._selectedDeviceId };
+        }
+        videoConstraints.width = { exact: this._webcamElement.width };
+        videoConstraints.height = { exact: this._webcamElement.height };
+        var constraints = {
+          video: videoConstraints,
+          audio: false
+        };
+        return constraints;
+      }
+
+      async start() {
+        return navigator.mediaDevices.enumerateDevices()
+          .then(devices => {
+            this.getVideoInputs(devices);
+            return this.stream();
+          });
+      }
+
+      async stream() {
+        if (this._streamList.length) {
+          this.stop();
+        }
+        return navigator.mediaDevices.getUserMedia(this.getMediaConstraints())
+          .then(stream => {
+            this._streamList.push(stream);
+            this._webcamElement.srcObject = stream;
+            this._webcamElement.play();
+          });
+      }
+
+      stop() {
+        this._streamList.forEach(stream => {
+          stream.getTracks().forEach(track => {
+            track.stop();
+          });
+        });
+        this._streamList = [];
+      }
+
+      flip() {
+        this._facingMode = this._facingMode === 'user' ? 'environment' : 'user';
+        this._selectedDeviceId = ''; // Clear device ID to use facingMode
+      }
+    }
+
+    const videoElement = document.getElementById('video');
+    const videoSelect = document.getElementById('videoSelect');
+    const flipButton = document.getElementById('flipCamera');
+    const canvasElement = document.getElementById('canvas');
+    const webcam = new Webcam(videoElement);
+
+    // Populate the videoSelect options
+    function populateVideoOptions(webcams) {
+      videoSelect.innerHTML = '';
+      webcams.forEach((webcam, index) => {
+        const option = document.createElement('option');
+        option.value = webcam.deviceId;
+        option.text = webcam.label || `Camera ${index + 1}`;
+        videoSelect.appendChild(option);
+      });
+    }
+
+    // Handle camera change
+    videoSelect.addEventListener('change', async (event) => {
+      webcam._selectedDeviceId = event.target.value;
+      await webcam.stream();
+    });
+
+    // Handle flip camera
+    flipButton.addEventListener('click', async () => {
+      webcam.flip();
+      await webcam.stream();
+    });
+
+    // Initialize the webcam
+    webcam.start().then(() => {
+      populateVideoOptions(webcam._webcamList);
+      if (webcam._webcamList.length > 0) {
+        videoSelect.value = webcam._webcamList[0].deviceId;
+      }
+    }).catch(error => {
+      console.error('Error starting the webcam:', error);
+    });
+  </script>
 </body>
 </html>
