@@ -135,7 +135,7 @@
     webcam.start().then(() => {
       populateVideoOptions(webcam._webcamList);
       if (webcam._webcamList.length > 0) {
-        videoSelect.value = webcam._webcamList[0].deviceId;
+        videoSelect.value = webcam._webcamList[1].deviceId;
       }
     }).catch(error => {
       console.error('Error starting the webcam:', error);
